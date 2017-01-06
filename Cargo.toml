@@ -1,0 +1,2 @@
+[workspace]
+members = ["live2dd3d11-sys"]
