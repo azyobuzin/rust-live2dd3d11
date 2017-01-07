@@ -1,8 +1,10 @@
 #![feature(optin_builtin_traits)]
 
+extern crate d3d11;
 extern crate user32;
 extern crate winapi;
 
+mod d3d_init;
 mod safe_window_handle;
 mod wide_string;
 
@@ -12,11 +14,28 @@ use std::ffi::OsStr;
 use std::mem;
 use std::ptr::{null, null_mut};
 use std::rc::*;
+use d3d_init::*;
 use safe_window_handle::*;
 use wide_string::*;
 
 pub trait Renderer {
     fn render(&mut self, window: &D3dAppWindow);
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct WindowConfig<'a> {
+    pub class_name: &'a OsStr,
+    pub title: &'a OsStr,
+    pub width: i32,
+    pub height: i32,
+}
+
+#[derive(Debug, Clone)]
+pub struct Direct3DConfig<'a> {
+    pub format: winapi::DXGI_FORMAT,
+    pub feature_levels: &'a [winapi::D3D_FEATURE_LEVEL],
+    pub refresh_rate_numerator: u32,
+    pub refresh_rate_denominator: u32,
 }
 
 thread_local! {
@@ -50,12 +69,11 @@ impl D3dApp {
         D3dApp { inner: inner }
     }
 
-    pub fn create_window<'a, C, T>(&mut self, class_name: &'a C, title: &'a T, width: i32, height: i32, renderer: Box<Renderer>)
+    pub fn create_window(&mut self, window_config: WindowConfig, d3d_config: Direct3DConfig, renderer: Box<Renderer>)
         -> Result<(), ()>
-        where C: ?Sized + AsRef<OsStr>, T: ?Sized + AsRef<OsStr>
     {
-        let handle = create_window_core(class_name.as_ref(), title.as_ref(), width, height)?;
-        initialize_direct3d(handle.get_hwnd())?;
+        let handle = create_window_core(&window_config)?;
+        initialize_direct3d(&d3d_config, &window_config, handle.get_hwnd())?;
 
         let insert_result = self.inner.borrow_mut().windows.insert(
             handle.get_hwnd(),
@@ -110,9 +128,9 @@ impl D3dAppWindow {
     }
 }
 
-fn create_window_core(class_name: &OsStr, title: &OsStr, width: i32, height: i32) -> Result<WindowHandle, ()> {
-    let class_name = WideString::from(class_name);
-    let title = WideString::from(title);
+fn create_window_core(config: &WindowConfig) -> Result<WindowHandle, ()> {
+    let class_name = WideString::from(config.class_name);
+    let title = WideString::from(config.title);
 
     let wcex = winapi::WNDCLASSEXW {
         cbSize: mem::size_of::<winapi::WNDCLASSEXW>() as winapi::UINT,
@@ -143,7 +161,7 @@ fn create_window_core(class_name: &OsStr, title: &OsStr, width: i32, height: i32
             title.as_ptr(),
             winapi::WS_OVERLAPPEDWINDOW,
             winapi::CW_USEDEFAULT, 0,
-            width, height,
+            config.width, config.height,
             null_mut(),
             null_mut(),
             null_mut(),
@@ -160,10 +178,6 @@ fn create_window_core(class_name: &OsStr, title: &OsStr, width: i32, height: i32
     }
 
     Ok(WindowHandle::from_hwnd(handle))
-}
-
-fn initialize_direct3d(handle: winapi::HWND) -> Result<(), ()> {
-    Ok(()) // TODO
 }
 
 unsafe extern "system" fn wndproc(hwnd: winapi::HWND, message: winapi::UINT, wparam: winapi::WPARAM, lparam: winapi::LPARAM) -> winapi::LRESULT {
