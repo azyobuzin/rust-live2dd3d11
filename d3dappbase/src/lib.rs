@@ -5,8 +5,11 @@ extern crate user32;
 extern crate winapi;
 
 mod d3d_init;
+mod safe_unknown;
 mod safe_window_handle;
 mod wide_string;
+
+pub use safe_unknown::SafeUnknown;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -39,6 +42,7 @@ pub struct Direct3DConfig<'a> {
 }
 
 thread_local! {
+    // スレッドごとの D3dAppInner
     static TL_APP_PTR: RefCell<Weak<RefCell<D3dAppInner>>> = Default::default();
 }
 
@@ -73,12 +77,13 @@ impl D3dApp {
         -> Result<(), ()>
     {
         let handle = create_window_core(&window_config)?;
-        initialize_direct3d(&d3d_config, &window_config, handle.get_hwnd())?;
+        let device = initialize_direct3d(&d3d_config, &window_config, handle.get_hwnd())?;
 
         let insert_result = self.inner.borrow_mut().windows.insert(
             handle.get_hwnd(),
             D3dAppWindow {
                 handle: handle,
+                d3d_device_resources: device,
                 renderer: renderer.into(),
             }
         );
@@ -95,14 +100,13 @@ impl D3dApp {
     pub fn main_loop(self) -> i32 {
         unsafe {
             let mut msg: winapi::MSG = std::mem::uninitialized();
-            let msg_ptr = &mut msg as winapi::LPMSG;
 
             loop {
-                if user32::PeekMessageW(msg_ptr, null_mut(), 0, 0, winapi::PM_NOREMOVE) != 0 {
-                    if user32::GetMessageW(msg_ptr, null_mut(), 0, 0) == 0 { return msg.wParam as i32; }
+                if user32::PeekMessageW(&mut msg, null_mut(), 0, 0, winapi::PM_NOREMOVE) != 0 {
+                    if user32::GetMessageW(&mut msg, null_mut(), 0, 0) == 0 { return msg.wParam as i32; }
 
-                    user32::TranslateMessage(msg_ptr);
-                    user32::DispatchMessageW(msg_ptr);
+                    user32::TranslateMessage(&mut msg);
+                    user32::DispatchMessageW(&mut msg);
                 } else {
                     for w in self.inner.borrow().windows.values() {
                         w.render()
@@ -114,18 +118,29 @@ impl D3dApp {
 }
 
 pub struct D3dAppWindow {
-    handle: WindowHandle,
+    pub handle: WindowHandle,
+    pub d3d_device_resources: D3dDeviceResources,
     renderer: RefCell<Box<Renderer>>,
 }
 
 impl D3dAppWindow {
-    pub fn get_handle(&self) -> winapi::HWND {
-        self.handle.get_hwnd()
-    }
-
     fn render(&self) {
         self.renderer.borrow_mut().render(self);
+
+        unsafe {
+            self.d3d_device_resources.swap_chain
+                .borrow_mut()
+                .Present(0, 0);
+        }
     }
+}
+
+pub struct D3dDeviceResources {
+    pub swap_chain: SafeUnknown<winapi::IDXGISwapChain>,
+    pub device: SafeUnknown<winapi::ID3D11Device>,
+    pub feature_level: winapi::D3D_FEATURE_LEVEL,
+    pub immediate_context: SafeUnknown<winapi::ID3D11DeviceContext>,
+    pub back_buffer_render_target_view: SafeUnknown<winapi::ID3D11RenderTargetView>,
 }
 
 fn create_window_core(config: &WindowConfig) -> Result<WindowHandle, ()> {
@@ -148,7 +163,7 @@ fn create_window_core(config: &WindowConfig) -> Result<WindowHandle, ()> {
     };
 
     let class_atom = unsafe {
-        user32::RegisterClassExW(&wcex as *const winapi::WNDCLASSEXW)
+        user32::RegisterClassExW(&wcex)
     };
 
     // TODO: Error handling
@@ -192,6 +207,7 @@ unsafe extern "system" fn wndproc(hwnd: winapi::HWND, message: winapi::UINT, wpa
                     windows.len() == 0
                 };
                 if quit {
+                    // すべてのウィンドウが破棄されたら終了する
                     user32::PostQuitMessage(0);
                 }
             }
