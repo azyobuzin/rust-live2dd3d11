@@ -4,6 +4,8 @@ extern crate d3d11;
 extern crate user32;
 extern crate winapi;
 
+#[macro_use] mod macros;
+
 mod d3d_init;
 mod safe_unknown;
 mod safe_window_handle;
@@ -132,6 +134,14 @@ impl D3dAppWindow {
                 .borrow_mut()
                 .Present(0, 0);
         }
+    }
+
+    pub fn close(&self) {
+        unsafe { user32::CloseWindow(self.handle.get_hwnd()); }
+    }
+
+    pub fn quit_app(&self) {
+        unsafe { user32::PostQuitMessage(0); }
     }
 }
 

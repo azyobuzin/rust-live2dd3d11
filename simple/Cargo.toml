@@ -1,0 +1,17 @@
+[package]
+name = "simple"
+version = "0.1.0"
+authors = ["azyobuzin <azyobuzin@users.sourceforge.jp>"]
+
+[dependencies]
+image = { version = "0.12", default-features = false, features = ["png_codec"] }
+winapi = "0.2"
+xmath = "0.2"
+
+[dependencies.d3dappbase]
+version = "0.1"
+path = "../d3dappbase"
+
+[dependencies.live2dd3d11-sys]
+version = "0.1"
+path = "../live2dd3d11-sys"

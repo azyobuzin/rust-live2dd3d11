@@ -45,9 +45,9 @@ pub fn getBuildOption_AVATAR_OPTION_A() -> bool {
 }
 
 extern { fn Live2D_setVertexDoubleBufferEnabled(enabled: w_bool); }
-pub fn setVertexDoubleBufferEnabled(enabled: bool) {
+pub unsafe fn setVertexDoubleBufferEnabled(enabled: bool) {
     let x = if enabled { 1 } else { 0 };
-    unsafe { Live2D_setVertexDoubleBufferEnabled(x) }
+    Live2D_setVertexDoubleBufferEnabled(x)
 }
 
 extern { fn Live2D_isVertexDoubleBufferEnabled() -> w_bool; }

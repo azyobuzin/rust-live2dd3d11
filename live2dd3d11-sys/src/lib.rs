@@ -41,3 +41,5 @@ pub use self::a_live2d_model::*;
 
 mod live2d_model_d3d11;
 pub use self::live2d_model_d3d11::*;
+
+pub mod ut_system;

@@ -1,6 +1,7 @@
 ﻿#define L2D_TARGET_D3D11
 #include "Live2D.h"
 #include "Live2DModelD3D11.h"
+#include "util/UtSystem.h"
 
 using namespace live2d;
 
@@ -251,5 +252,32 @@ extern "C" {
 
     int Live2DModelD3D11_getErrorD3D_tmp(void *p) {
         return self->getErrorD3D_tmp();
+    }
+}
+
+// UtSystem
+extern "C" {
+    w_bool UtSystem_isBigEndian() {
+        return UtSystem::isBigEndian();
+    }
+
+    l2d_int64 UtSystem_getTimeMSec() {
+        return UtSystem::getTimeMSec();
+    }
+
+    l2d_int64 UtSystem_getUserTimeMSec() {
+        return UtSystem::getUserTimeMSec();
+    }
+
+    void UtSystem_setUserTimeMSec(l2d_int64 t) {
+        UtSystem::setUserTimeMSec(t);
+    }
+
+    l2d_int64 UtSystem_updateUserTimeMSec() {
+        return UtSystem::updateUserTimeMSec();
+    }
+
+    void UtSystem_resetUserTimeMSec() {
+        UtSystem::resetUserTimeMSec();
     }
 }

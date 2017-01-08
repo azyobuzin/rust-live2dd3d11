@@ -4,10 +4,6 @@ use d3d11;
 use winapi;
 use super::*;
 
-macro_rules! trycom {
-    ($e:expr) => ((if ($e) < 0 { return Err(()); }))
-}
-
 /// MIDL_INTERFACE("6f15aaf2-d208-4e89-9ab4-489535d34f9c")
 #[allow(non_upper_case_globals)]
 const IID_ID3D11Texture2D: winapi::IID = winapi::IID {

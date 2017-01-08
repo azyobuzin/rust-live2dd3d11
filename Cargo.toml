@@ -1,2 +1,2 @@
 [workspace]
-members = ["d3dappbase", "live2dd3d11-sys"]
+members = ["d3dappbase", "live2dd3d11-sys", "simple"]

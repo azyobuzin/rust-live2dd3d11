@@ -4,7 +4,7 @@ extern crate winapi;
 use d3dappbase::*;
 
 fn main() {
-    let mut app = d3dappbase::D3dApp::new();
+    let mut app = D3dApp::new();
     app.create_window(
         WindowConfig {
             class_name: "SingleWindow".as_ref(),
@@ -27,8 +27,8 @@ fn main() {
 
 struct ClearRenderer;
 
-impl d3dappbase::Renderer for ClearRenderer {
-    fn render(&mut self, window: &d3dappbase::D3dAppWindow) {
+impl Renderer for ClearRenderer {
+    fn render(&mut self, window: &D3dAppWindow) {
         const CORNFLOWER_BLUE: [winapi::FLOAT; 4] = [0.392156899, 0.584313750, 0.929411829, 1.000000000];
 
         unsafe {
