@@ -4,14 +4,10 @@ extern crate d3d11;
 extern crate user32;
 extern crate winapi;
 
-#[macro_use] mod macros;
-
+pub mod com_support;
 mod d3d_init;
-mod safe_unknown;
 mod safe_window_handle;
 mod wide_string;
-
-pub use safe_unknown::SafeUnknown;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -19,6 +15,7 @@ use std::ffi::OsStr;
 use std::mem;
 use std::ptr::{null, null_mut};
 use std::rc::*;
+use com_support::*;
 use d3d_init::*;
 use safe_window_handle::*;
 use wide_string::*;
@@ -79,7 +76,7 @@ impl D3dApp {
         -> Result<(), ()>
     {
         let handle = create_window_core(&window_config)?;
-        let device = initialize_direct3d(&d3d_config, &window_config, handle.get_hwnd())?;
+        let device = initialize_direct3d(&d3d_config, &window_config, handle.get_hwnd()).map_err(|_| ())?;
 
         let insert_result = self.inner.borrow_mut().windows.insert(
             handle.get_hwnd(),

@@ -14,7 +14,7 @@ const IID_ID3D11Texture2D: winapi::IID = winapi::IID {
 };
 
 pub fn initialize_direct3d(config: &super::Direct3DConfig, window_config: &super::WindowConfig, handle: winapi::HWND)
-    -> Result<D3dDeviceResources, ()>
+    -> Result<D3dDeviceResources, ComError>
 {
     unsafe {
         // デバイスとスワップチェーン
@@ -48,7 +48,7 @@ pub fn initialize_direct3d(config: &super::Direct3DConfig, window_config: &super
             let mut feature_level: winapi::D3D_FEATURE_LEVEL = mem::uninitialized();
             let mut immediate_context: *mut winapi::ID3D11DeviceContext = null_mut();
 
-            trycom!(d3d11::D3D11CreateDeviceAndSwapChain(
+            d3d11::D3D11CreateDeviceAndSwapChain(
                 null_mut(),
                 winapi::D3D_DRIVER_TYPE_HARDWARE,
                 null_mut(),
@@ -61,7 +61,7 @@ pub fn initialize_direct3d(config: &super::Direct3DConfig, window_config: &super
                 &mut device,
                 &mut feature_level,
                 &mut immediate_context
-            ));
+            ).to_result()?;
 
             (
                 SafeUnknown::from_ptr(swap_chain),
@@ -75,19 +75,19 @@ pub fn initialize_direct3d(config: &super::Direct3DConfig, window_config: &super
         let back_buffer_rtv = {
             let back_buffer_texture = {
                 let mut p: *mut winapi::ID3D11Texture2D = null_mut();
-                trycom!(swap_chain.GetBuffer(
+                swap_chain.GetBuffer(
                     0,
                     &IID_ID3D11Texture2D,
                     (&mut p as *mut *mut winapi::ID3D11Texture2D) as *mut *mut winapi::c_void
-                ));
+                ).to_result()?;
                 SafeUnknown::from_ptr(p)
             };
             let mut p: *mut winapi::ID3D11RenderTargetView = null_mut();
-            trycom!(device.CreateRenderTargetView(
+            device.CreateRenderTargetView(
                 back_buffer_texture.as_ptr() as *mut winapi::ID3D11Resource,
                 null(),
                 &mut p
-            ));
+            ).to_result()?;
             SafeUnknown::from_ptr(p)
         };
 

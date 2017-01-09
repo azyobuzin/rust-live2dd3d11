@@ -1,12 +1,18 @@
-#[macro_use] extern crate d3dappbase;
+extern crate d3dappbase;
 extern crate image;
 extern crate live2dd3d11_sys as l2d;
 extern crate winapi;
 extern crate xmath;
 
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
+use std::fmt;
 use std::path;
+use std::ptr::null_mut;
 use d3dappbase::*;
+use d3dappbase::com_support::*;
+
+const WINDOW_WIDTH: i32 = 800;
+const WINDOW_HEIGHT: i32 = 800;
 
 fn main() {
     let mut app = D3dApp::new();
@@ -14,8 +20,8 @@ fn main() {
         WindowConfig {
             class_name: "RustLive2DSimple".as_ref(),
             title: "Simple".as_ref(),
-            width: 800,
-            height: 800,
+            width: WINDOW_WIDTH,
+            height: WINDOW_HEIGHT,
         },
         Direct3DConfig {
             format: winapi::DXGI_FORMAT_R8G8B8A8_UNORM,
@@ -30,7 +36,8 @@ fn main() {
 
 struct SimpleRendererState {
     live2d_model: l2d::Live2DModelD3D11,
-    textures: Vec<winapi::ID3D11ShaderResourceView>,
+    #[allow(dead_code)]
+    textures: Vec<SafeUnknown<winapi::ID3D11ShaderResourceView>>,
 }
 
 enum SimpleRenderer {
@@ -41,9 +48,20 @@ enum SimpleRenderer {
 
 impl Renderer for SimpleRenderer {
     fn render(&mut self, window: &D3dAppWindow) {
+        // とりあえず白で消しておく
+        unsafe {
+            const CLEAR_COLOR: [winapi::c_float; 4] = [1.0, 1.0, 1.0, 1.0];
+            window.d3d_device_resources.immediate_context
+                .borrow_mut()
+                .ClearRenderTargetView(
+                    window.d3d_device_resources.back_buffer_render_target_view.as_ptr(),
+                    &CLEAR_COLOR
+                );
+        }
+
         match *self {
             SimpleRenderer::Initialized(ref mut state) => {
-                render_core(state, window);
+                render_core(state);
                 return;
             }
             SimpleRenderer::Error => { return; }
@@ -120,13 +138,149 @@ fn initialize(window: &D3dAppWindow) -> Result<SimpleRendererState, ()> {
         return Err(());
     }
 
-    unimplemented!() // TODO: テクスチャつくり
+    let texture_paths = [
+        sdk_dir.join("sample/Simple/res/epsilon/Epsilon2.1.2048/texture_00.png")
+    ];
+    let mut textures = Vec::with_capacity(texture_paths.len());
+    for (i, x) in texture_paths.iter().enumerate() {
+        let mut device = unsafe { window.d3d_device_resources.device.borrow_mut() };
+        match create_texture_view(device, x) {
+            Ok(srv) => {
+                unsafe {
+                    live2d_model.setTexture(i as winapi::c_int, srv.as_ptr());
+                }
+                textures.push(srv);
+            }
+            Err(x) => {
+                println!("couldn't load the texture: {}", x);
+                return Err(());
+            }
+        }
+    }
+
+    // 原作通りの座標変換
+    let aspect = (WINDOW_WIDTH as f32) / (WINDOW_HEIGHT as f32);
+    let model_width = live2d_model.getCanvasWidth();
+    let model_height = live2d_model.getCanvasHeight();
+    let ortho = xmath::Matrix::orthographic(model_height, -model_height * aspect, 1.0, 1.0);
+    let trans = xmath::Matrix::translation(-model_width / 2.0, -model_height / 2.0, 0.0);
+    let mut m: [[f32; 4]; 4] = (trans * ortho).into();
+    unsafe { live2d_model.setMatrix(m.as_mut_ptr() as *mut winapi::c_float); }
+
+    Ok(SimpleRendererState {
+        live2d_model: live2d_model,
+        textures: textures,
+    })
 }
 
-fn render_core(state: &mut SimpleRendererState, window: &D3dAppWindow) {
-    // TODO
+fn render_core(state: &mut SimpleRendererState) {
+    static PARAM_ANGLE_X: &'static [u8] = b"PARAM_ANGLE_X\0";
+    static PARAM_EYE_L_OPEN: &'static [u8] = b"PARAM_EYE_L_OPEN\0";
+    static PARAM_EYE_R_OPEN: &'static [u8] = b"PARAM_EYE_R_OPEN\0";
+
+    let t = (l2d::ut_system::getUserTimeMSec() as f64) / 1000.0 * 2.0 * std::f64::consts::PI;
+    unsafe {
+        state.live2d_model.setParamFloat(
+            CStr::from_ptr(PARAM_ANGLE_X.as_ptr() as *const winapi::c_char),
+            (30.0 * (t / 3.0).sin()) as winapi::c_float
+        );
+        state.live2d_model.setParamFloat(
+            CStr::from_ptr(PARAM_EYE_L_OPEN.as_ptr() as *const winapi::c_char),
+            (1.0 + (t / 3.0).sin()) as winapi::c_float
+        );
+        state.live2d_model.setParamFloat(
+            CStr::from_ptr(PARAM_EYE_R_OPEN.as_ptr() as *const winapi::c_char),
+            (1.0 + (t / 3.0).sin()) as winapi::c_float
+        );
+
+        state.live2d_model.update();
+        state.live2d_model.draw();
+    }
 }
 
-fn create_texture_view<P: AsRef<path::Path>>(path: P) -> Result<SafeUnknown<winapi::ID3D11ShaderResourceView>, ()> {
-    unimplemented!() // TODO
+#[derive(Debug)]
+enum CreateTextureViewError {
+    LoadImage(image::ImageError),
+    DirectX(ComError),
+}
+
+impl From<image::ImageError> for CreateTextureViewError {
+    fn from(e: image::ImageError) -> CreateTextureViewError {
+        CreateTextureViewError::LoadImage(e)
+    }
+}
+
+impl From<ComError> for CreateTextureViewError {
+    fn from(e: ComError) -> CreateTextureViewError {
+        CreateTextureViewError::DirectX(e)
+    }
+}
+
+impl fmt::Display for CreateTextureViewError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match *self {
+            CreateTextureViewError::LoadImage(ref x) => fmt::Display::fmt(x, f),
+            CreateTextureViewError::DirectX(ref x) => fmt::Display::fmt(x, f),
+        }
+    }
+}
+
+fn create_texture_view<P: AsRef<path::Path>>(device: &mut winapi::ID3D11Device, path: P)
+    -> Result<SafeUnknown<winapi::ID3D11ShaderResourceView>, CreateTextureViewError>
+{
+    let img = image::open(path)?.to_rgba();
+
+    let texture_desc = winapi::D3D11_TEXTURE2D_DESC {
+        Width: img.width(),
+        Height: img.height(),
+        MipLevels: 0,
+        ArraySize: 1,
+        Format: winapi::DXGI_FORMAT_R8G8B8A8_UNORM,
+        SampleDesc: winapi::DXGI_SAMPLE_DESC {
+            Count: 1,
+            Quality: 0,
+        },
+        Usage: winapi::D3D11_USAGE_DEFAULT,
+        BindFlags: winapi::D3D11_BIND_SHADER_RESOURCE.0,
+        CPUAccessFlags: 0,
+        MiscFlags: 0,
+    };
+
+    let img_data = img.into_raw();
+    let initial_data = winapi::D3D11_SUBRESOURCE_DATA {
+        pSysMem: img_data.as_ptr() as *const winapi::c_void,
+        SysMemPitch: img_data.len() as winapi::UINT,
+        SysMemSlicePitch: 0,
+    };
+
+    let texture = unsafe {
+        let mut p: *mut winapi::ID3D11Texture2D = null_mut();
+        device.CreateTexture2D(
+            &texture_desc,
+            &initial_data,
+            &mut p
+        ).to_result()?;
+        SafeUnknown::from_ptr(p)
+    };
+
+    let srv_desc = winapi::D3D11_SHADER_RESOURCE_VIEW_DESC {
+        Format: winapi::DXGI_FORMAT_R8G8B8A8_UNORM,
+        ViewDimension: winapi::D3D11_SRV_DIMENSION_TEXTURE2D,
+        u: [
+            0, // MostDetailedMip
+            1, // MipLevels
+            0,
+            0,
+        ],
+    };
+
+    Ok(unsafe {
+        let mut p: *mut winapi::ID3D11ShaderResourceView = null_mut();
+        device.CreateShaderResourceView(
+            texture.as_ptr() as *mut winapi::ID3D11Resource,
+            &srv_desc,
+            &mut p
+        ).to_result()?;
+        SafeUnknown::from_ptr(p)
+    })
 }
