@@ -32,6 +32,7 @@ fn main() {
         Box::new(SimpleRenderer::Uninitialized)
     ).unwrap();
     app.main_loop();
+    unsafe { l2d::dispose(); }
 }
 
 struct SimpleRendererState {
@@ -78,12 +79,6 @@ impl Renderer for SimpleRenderer {
                 *self = SimpleRenderer::Error;
             }
         }
-    }
-}
-
-impl Drop for SimpleRenderer {
-    fn drop(&mut self) {
-        unsafe { l2d::dispose(); }
     }
 }
 
@@ -233,7 +228,7 @@ fn create_texture_view<P: AsRef<path::Path>>(device: &mut winapi::ID3D11Device, 
     let texture_desc = winapi::D3D11_TEXTURE2D_DESC {
         Width: img.width(),
         Height: img.height(),
-        MipLevels: 0,
+        MipLevels: 1,
         ArraySize: 1,
         Format: winapi::DXGI_FORMAT_R8G8B8A8_UNORM,
         SampleDesc: winapi::DXGI_SAMPLE_DESC {
@@ -249,7 +244,7 @@ fn create_texture_view<P: AsRef<path::Path>>(device: &mut winapi::ID3D11Device, 
     let img_data = img.into_raw();
     let initial_data = winapi::D3D11_SUBRESOURCE_DATA {
         pSysMem: img_data.as_ptr() as *const winapi::c_void,
-        SysMemPitch: img_data.len() as winapi::UINT,
+        SysMemPitch: texture_desc.Width * 4,
         SysMemSlicePitch: 0,
     };
 
