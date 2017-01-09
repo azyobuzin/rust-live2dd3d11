@@ -154,10 +154,10 @@ fn initialize(window: &D3dAppWindow) -> Result<SimpleRendererState, ()> {
     }
 
     // 原作通りの座標変換
-    let aspect = (WINDOW_WIDTH as f32) / (WINDOW_HEIGHT as f32);
+    let aspect = (WINDOW_HEIGHT as f32) / (WINDOW_WIDTH as f32);
     let model_width = live2d_model.getCanvasWidth();
     let model_height = live2d_model.getCanvasHeight();
-    let ortho = xmath::Matrix::orthographic(model_height, -model_height * aspect, 1.0, 1.0);
+    let ortho = xmath::Matrix::orthographic(model_height, -model_height * aspect, -1.0, 1.0);
     let trans = xmath::Matrix::translation(-model_width / 2.0, -model_height / 2.0, 0.0);
     let mut m: [[f32; 4]; 4] = (trans * ortho).into();
     unsafe { live2d_model.setMatrix(m.as_mut_ptr() as *mut winapi::c_float); }
