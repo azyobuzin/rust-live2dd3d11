@@ -157,9 +157,9 @@ fn initialize(window: &D3dAppWindow) -> Result<SimpleRendererState, ()> {
     let aspect = (WINDOW_HEIGHT as f32) / (WINDOW_WIDTH as f32);
     let model_width = live2d_model.getCanvasWidth();
     let model_height = live2d_model.getCanvasHeight();
-    let ortho = xmath::Matrix::orthographic(model_height, -model_height * aspect, -1.0, 1.0);
+    let ortho = orthographic_lh(model_height, -model_height * aspect, -1.0, 1.0);
     let trans = xmath::Matrix::translation(-model_width / 2.0, -model_height / 2.0, 0.0);
-    let mut m: [[f32; 4]; 4] = (trans * ortho).into();
+    let mut m: [[f32; 4]; 4] = (trans * ortho).transpose().into();
     unsafe { live2d_model.setMatrix(m.as_mut_ptr() as *mut winapi::c_float); }
 
     Ok(SimpleRendererState {
@@ -278,4 +278,14 @@ fn create_texture_view<P: AsRef<path::Path>>(device: &mut winapi::ID3D11Device, 
         ).to_result()?;
         SafeUnknown::from_ptr(p)
     })
+}
+
+fn orthographic_lh(view_width: f32, view_height: f32, near_z: f32, far_z: f32) -> xmath::Matrix {
+    let f_range = 1.0 / (far_z - near_z);
+    xmath::Matrix::new(
+        2.0 / view_width, 0.0, 0.0, 0.0,
+        0.0, 2.0 / view_height, 0.0, 0.0,
+        0.0, 0.0, f_range, 0.0,
+        0.0, 0.0, -f_range * near_z, 1.0
+    )
 }
