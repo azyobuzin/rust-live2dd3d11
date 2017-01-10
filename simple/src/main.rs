@@ -223,7 +223,10 @@ impl fmt::Display for CreateTextureViewError {
 fn create_texture_view<P: AsRef<path::Path>>(device: &mut winapi::ID3D11Device, path: P)
     -> Result<SafeUnknown<winapi::ID3D11ShaderResourceView>, CreateTextureViewError>
 {
-    let img = image::open(path)?.to_rgba();
+    let img = match image::open(path)? {
+        image::DynamicImage::ImageRgba8(x) => x,
+        x => x.to_rgba(),
+    };
 
     let texture_desc = winapi::D3D11_TEXTURE2D_DESC {
         Width: img.width(),
